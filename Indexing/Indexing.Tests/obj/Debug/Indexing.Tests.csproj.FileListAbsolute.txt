@@ -1,0 +1,7 @@
+C:\dev\jindex\Indexing\Indexing.Tests\bin\Debug\Indexing.Tests.dll
+C:\dev\jindex\Indexing\Indexing.Tests\bin\Debug\Indexing.Tests.pdb
+C:\dev\jindex\Indexing\Indexing.Tests\bin\Debug\Indexing.dll
+C:\dev\jindex\Indexing\Indexing.Tests\bin\Debug\Indexing.pdb
+C:\dev\jindex\Indexing\Indexing.Tests\obj\Debug\Indexing.Tests.csprojResolveAssemblyReference.cache
+C:\dev\jindex\Indexing\Indexing.Tests\obj\Debug\Indexing.Tests.dll
+C:\dev\jindex\Indexing\Indexing.Tests\obj\Debug\Indexing.Tests.pdb
