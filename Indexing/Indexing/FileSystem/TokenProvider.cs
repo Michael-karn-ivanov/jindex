@@ -11,7 +11,7 @@ namespace Indexing.FileSystem
     {
         public ILexer Lexer { get; set; }
 
-        private IEnumerable<string> Provide(string filePath)
+        public IEnumerable<string> Provide(string filePath)
         {
             using (var reader = new StreamReader(filePath))
             {

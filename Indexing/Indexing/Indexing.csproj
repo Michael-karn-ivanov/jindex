@@ -43,12 +43,11 @@
     <Compile Include="FileSystem\ILexer.cs" />
     <Compile Include="FileSystem\NaiveLexer.cs" />
     <Compile Include="FileSystem\TokenProvider.cs" />
+    <Compile Include="Kernel\FileQueue.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Storage\IStorage.cs" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Kernel\" />
-    <Folder Include="Storage\" />
-  </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
