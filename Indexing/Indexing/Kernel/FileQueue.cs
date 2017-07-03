@@ -1,18 +1,33 @@
-﻿using System.Collections.Concurrent;
+﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Remoting.Channels;
+using System.Threading;
 using Indexing.FileSystem;
 using Indexing.Storage;
+using Timer = System.Timers.Timer;
 
 namespace Indexing.Kernel
 {
-    public class FileQueue
+    public class FileQueue : IDisposable
     {
+        public const int ProcessPeriodMS = 250;
         private ConcurrentDictionary<string, bool> _fileQueue = new ConcurrentDictionary<string, bool>();
         private ConcurrentDictionary<string, FileSystemWatcher> _watchers = new ConcurrentDictionary<string, FileSystemWatcher>();
-        private IStorage _Storage;
-        private TokenProvider _Provider;
+        private IStorage _storage;
+        private TokenProvider _provider;
+        private Timer _timer;
+
+        public FileQueue(IStorage storage, TokenProvider provider)
+        {
+            _storage = storage;
+            _provider = provider;
+            _timer = new Timer(ProcessPeriodMS);
+            _timer.Elapsed += (e, s) => Process();
+            _timer.AutoReset = true;
+            _timer.Start();
+        }
 
         private void Enqueue(string filePath, bool reportedByWatcher)
         {
@@ -41,14 +56,14 @@ namespace Indexing.Kernel
                 if (frozenQueue[key] && File.Exists(key))
                 {
                     // file was changed and worker knows about it
-                    await _Storage.Change(_Provider.Provide(key), key);
+                    await _storage.Change(_provider.Provide(key), key);
                 }
                 else if (frozenQueue[key] && !File.Exists(key))
                 {
                     // file was deleted and worker knows about it
-                    await _Storage.Delete(key);
+                    await _storage.Delete(key);
                     FileSystemWatcher watcherUnsubscribe;
-                    if (_watchers.TryRemove(key, out watcherUnsubscribe))
+                    if (_watchers != null && _watchers.TryRemove(key, out watcherUnsubscribe))
                     {
                         watcherUnsubscribe.EnableRaisingEvents = false;
                         watcherUnsubscribe.Dispose();
@@ -61,7 +76,7 @@ namespace Indexing.Kernel
                 else
                 {
                     // !frozenQueue[key] && File.Exists(key) === we added new file for tracking
-                    await _Storage.Add(_Provider.Provide(key), key);
+                    await _storage.Add(_provider.Provide(key), key);
                 }
             }
         }
@@ -81,8 +96,10 @@ namespace Indexing.Kernel
                 Enqueue(eventArgs.FullPath, true);
             };
             watcher.Deleted += (sender, eventArgs) => Enqueue(filePath, true);
-            if (_watchers.TryAdd(filePath, watcher))
+            if (_watchers != null && _watchers.TryAdd(filePath, watcher))
                 watcher.EnableRaisingEvents = true;
+            else
+                watcher.Dispose();
 
         }
 
@@ -115,8 +132,10 @@ namespace Indexing.Kernel
                 if ((File.GetAttributes(eventArgs.FullPath) & FileAttributes.Directory) != FileAttributes.Directory)
                     Enqueue(eventArgs.FullPath, true);
             };
-            if (_watchers.TryAdd(directoryPath, watcher))
+            if (_watchers != null && _watchers.TryAdd(directoryPath, watcher))
                 watcher.EnableRaisingEvents = true;
+            else
+                watcher.Dispose();
         }
 
         public void Add(string path)
@@ -130,12 +149,32 @@ namespace Indexing.Kernel
         public void Delete(string path)
         {
             FileSystemWatcher watcherUnsubscribe;
-            if (_watchers.TryRemove(path, out watcherUnsubscribe))
+            if (_watchers != null && _watchers.TryRemove(path, out watcherUnsubscribe))
             {
                 watcherUnsubscribe.EnableRaisingEvents = false;
                 watcherUnsubscribe.Dispose();
             }
             // TODO clear storage
+        }
+
+        public void Dispose()
+        {
+            var frozenWatchers = _watchers;
+            _watchers = null;
+            if (frozenWatchers != null)
+            {
+                foreach (var watcher in frozenWatchers.Values)
+                {
+                    watcher.Dispose();
+                }
+            }
+            if (_timer != null)
+            {
+                _timer.Stop();
+                _timer.Dispose();
+                _timer = null;
+            }
+            GC.SuppressFinalize(this);
         }
     }
 }

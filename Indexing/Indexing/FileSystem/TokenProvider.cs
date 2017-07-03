@@ -7,15 +7,20 @@ using System.Threading.Tasks;
 
 namespace Indexing.FileSystem
 {
-    class TokenProvider
+    public class TokenProvider
     {
-        public ILexer Lexer { get; set; }
+        private ILexer _lexer;
+
+        public TokenProvider(ILexer lexer)
+        {
+            _lexer = lexer;
+        }
 
         public IEnumerable<string> Provide(string filePath)
         {
             using (var reader = new StreamReader(filePath))
             {
-                return Lexer.Tokenize(reader);
+                return _lexer.Tokenize(reader);
             }
         }
     }

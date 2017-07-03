@@ -53,6 +53,7 @@
   </Choose>
   <ItemGroup>
     <Compile Include="FileSystem\NaiveLexerTest.cs" />
+    <Compile Include="Kernel\FileQueueTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
