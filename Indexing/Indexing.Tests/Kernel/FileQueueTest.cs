@@ -26,7 +26,7 @@ namespace Indexing.Tests.Kernel
 
         [TestMethod]
         [TestCategory("DiskTests")]
-        public void QueueStartAddDirectoryWithFiles()
+        public void TestQueueStartAddDirectoryWithFiles()
         {
             var directoryName = Guid.NewGuid().ToString();
             var directory = Directory.CreateDirectory(directoryName);
@@ -43,7 +43,7 @@ namespace Indexing.Tests.Kernel
             using (var objectUnderTest = new FileQueue(storage, provider))
             {
                 objectUnderTest.Add(directory.FullName);
-                Thread.Sleep(1000);
+                Thread.Sleep((int)(FileQueue.ProcessPeriodMS * 1.5));
                 Assert.AreEqual(2, storage.Actions.Count);
                 var file1 = storage.Actions.Dequeue();
                 var file2 = storage.Actions.Dequeue();
@@ -56,6 +56,53 @@ namespace Indexing.Tests.Kernel
             File.Delete(fileName2);
             Directory.Delete(directory.FullName);
         }
+
+        [TestMethod]
+        [TestCategory("DiskTests")]
+        public void TestAddDirectoryCreateFileChangeFileRenameFileRemoveFile()
+        {
+            var directoryName = Guid.NewGuid().ToString();
+            var directory = Directory.CreateDirectory(directoryName);
+            var provider = new TokenProvider(new LexerMock());
+            var storage = new StorageMock();
+            using (var objectUnderTest = new FileQueue(storage, provider))
+            {
+                objectUnderTest.Add(directory.FullName);
+                var fileName = directory.FullName + "\\" + Guid.NewGuid().ToString();
+                using (var fs = File.Create(fileName))
+                {
+                    fs.Write(new byte[] {1}, 0, 1);
+                }
+                Thread.Sleep((int)(FileQueue.ProcessPeriodMS * 1.5));
+                using (StreamWriter sw = new StreamWriter(fileName))
+                {
+                    sw.Write('a');
+                    sw.Flush();
+                    sw.Close();
+                }
+                Thread.Sleep((int)(FileQueue.ProcessPeriodMS * 1.5));
+                var newFileName = directory.FullName + "\\" + Guid.NewGuid().ToString();
+                File.Move(fileName, newFileName);
+                Thread.Sleep((int)(FileQueue.ProcessPeriodMS * 1.5));
+                File.Delete(newFileName);
+                Thread.Sleep((int)(FileQueue.ProcessPeriodMS * 1.5));
+                Assert.AreEqual(5, storage.Actions.Count);
+            }
+        }
+
+        public void TestAddExplicitlyFileChangeFileRenameDeleteFile()
+        {
+        }
+
+        public void TestCreateNestedDirectoryCopyFileCreateFileChangeFileMoveFileUpDeleteFile()
+        {
+        }
+
+        public void TestConcurrentFileCreateChangeDelete()
+        {
+        }
+
+
 
         private class LexerMock : ILexer
         {

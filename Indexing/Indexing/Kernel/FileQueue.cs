@@ -122,15 +122,15 @@ namespace Indexing.Kernel
             };
             watcher.Renamed += (sender, eventArgs) =>
             {
-                if ((File.GetAttributes(eventArgs.OldFullPath) & FileAttributes.Directory) != FileAttributes.Directory)
-                    Enqueue(eventArgs.OldFullPath, true);
                 if ((File.GetAttributes(eventArgs.FullPath) & FileAttributes.Directory) != FileAttributes.Directory)
+                {
+                    Enqueue(eventArgs.OldFullPath, true);
                     Enqueue(eventArgs.FullPath, true);
+                }
             };
             watcher.Deleted += (sender, eventArgs) =>
             {
-                if ((File.GetAttributes(eventArgs.FullPath) & FileAttributes.Directory) != FileAttributes.Directory)
-                    Enqueue(eventArgs.FullPath, true);
+                Enqueue(eventArgs.FullPath, true);
             };
             if (_watchers != null && _watchers.TryAdd(directoryPath, watcher))
                 watcher.EnableRaisingEvents = true;
@@ -176,5 +176,14 @@ namespace Indexing.Kernel
             }
             GC.SuppressFinalize(this);
         }
+    }
+
+    public enum FileState
+    {
+        Created,
+        Changed,
+        Deleted,
+        RenamedFrom,
+        RenamedTo
     }
 }
