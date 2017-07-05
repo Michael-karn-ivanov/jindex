@@ -1,5 +1,5 @@
 C:\dev\jindex\Indexing\Indexing\bin\Debug\Indexing.dll
 C:\dev\jindex\Indexing\Indexing\bin\Debug\Indexing.pdb
-C:\dev\jindex\Indexing\Indexing\obj\Debug\Indexing.csprojResolveAssemblyReference.cache
 C:\dev\jindex\Indexing\Indexing\obj\Debug\Indexing.dll
 C:\dev\jindex\Indexing\Indexing\obj\Debug\Indexing.pdb
+C:\dev\jindex\Indexing\Indexing\obj\Debug\Indexing.csprojResolveAssemblyReference.cache

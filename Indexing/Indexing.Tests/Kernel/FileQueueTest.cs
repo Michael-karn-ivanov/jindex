@@ -43,7 +43,6 @@ namespace Indexing.Tests.Kernel
             using (var objectUnderTest = new FileQueue(storage, provider))
             {
                 objectUnderTest.Add(directory.FullName);
-                Thread.Sleep((int)(FileQueue.ProcessPeriodMS * 1.5));
                 Assert.AreEqual(2, storage.Actions.Count);
                 var file1 = storage.Actions.Dequeue();
                 var file2 = storage.Actions.Dequeue();
@@ -59,7 +58,7 @@ namespace Indexing.Tests.Kernel
 
         [TestMethod]
         [TestCategory("DiskTests")]
-        public void TestAddDirectoryCreateFileChangeFileRenameFileRemoveFile()
+        public void TestAddDirectoryCreateFileChangeFileRenameFileRemoveFileSlow()
         {
             var directoryName = Guid.NewGuid().ToString();
             var directory = Directory.CreateDirectory(directoryName);
@@ -68,25 +67,30 @@ namespace Indexing.Tests.Kernel
             using (var objectUnderTest = new FileQueue(storage, provider))
             {
                 objectUnderTest.Add(directory.FullName);
+                Thread.Sleep((int)(1.25 * TimerPool.IntervalMS));
+                Assert.AreEqual(0, storage.Actions.Count);
                 var fileName = directory.FullName + "\\" + Guid.NewGuid().ToString();
                 using (var fs = File.Create(fileName))
                 {
                     fs.Write(new byte[] {1}, 0, 1);
                 }
-                Thread.Sleep((int)(FileQueue.ProcessPeriodMS * 1.5));
+                Thread.Sleep((int)(1.25 * TimerPool.IntervalMS));
+                Assert.AreEqual(1, storage.Actions.Count);
                 using (StreamWriter sw = new StreamWriter(fileName))
                 {
                     sw.Write('a');
                     sw.Flush();
                     sw.Close();
                 }
-                Thread.Sleep((int)(FileQueue.ProcessPeriodMS * 1.5));
+                Thread.Sleep((int)(1.25 * TimerPool.IntervalMS));
+                Assert.AreEqual(2, storage.Actions.Count);
                 var newFileName = directory.FullName + "\\" + Guid.NewGuid().ToString();
                 File.Move(fileName, newFileName);
-                Thread.Sleep((int)(FileQueue.ProcessPeriodMS * 1.5));
+                Thread.Sleep((int)(1.25 * TimerPool.IntervalMS));
+                Assert.AreEqual(3, storage.Actions.Count);
                 File.Delete(newFileName);
-                Thread.Sleep((int)(FileQueue.ProcessPeriodMS * 1.5));
-                Assert.AreEqual(5, storage.Actions.Count);
+                Thread.Sleep((int)(1.25 * TimerPool.IntervalMS));
+                Assert.AreEqual(4, storage.Actions.Count);
             }
         }
 
@@ -124,12 +128,6 @@ namespace Indexing.Tests.Kernel
             public Task Add(IEnumerable<string> words, string filePath)
             {
                 Actions.Enqueue(new Tuple<string, string>(filePath, _Add));
-                return Task.Delay(0);
-            }
-
-            public Task Change(IEnumerable<string> words, string filePath)
-            {
-                Actions.Enqueue(new Tuple<string, string>(filePath, _Change));
                 return Task.Delay(0);
             }
 

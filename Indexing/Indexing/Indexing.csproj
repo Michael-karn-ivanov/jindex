@@ -44,6 +44,7 @@
     <Compile Include="FileSystem\NaiveLexer.cs" />
     <Compile Include="FileSystem\TokenProvider.cs" />
     <Compile Include="Kernel\FileQueue.cs" />
+    <Compile Include="Kernel\TimerPool.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Storage\IStorage.cs" />
   </ItemGroup>
