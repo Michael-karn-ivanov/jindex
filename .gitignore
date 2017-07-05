@@ -3,8 +3,8 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
-#*.dll
-#*.pdb
+*.dll
+*.pdb
 
 # User-specific files
 *.suo
