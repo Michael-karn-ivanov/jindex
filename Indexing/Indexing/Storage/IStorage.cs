@@ -8,8 +8,6 @@ namespace Indexing.Storage
     {
         Task Add(IEnumerable<string> words, string filePath);
         Task Delete(string filePath);
-
-        Task Change(IEnumerable<string> words, string filePath);
         Task Move(string filePathFrom, string filePathTo);
     }
 }

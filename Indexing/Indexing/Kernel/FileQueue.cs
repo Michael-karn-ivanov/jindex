@@ -13,7 +13,7 @@ namespace Indexing.Kernel
     public class FileQueue : IDisposable
     {
         public const int ProcessPeriodMS = 250;
-        private ConcurrentDictionary<string, bool> _fileQueue = new ConcurrentDictionary<string, bool>();
+        private ConcurrentDictionary<string, FileSystemEventArgs> _fileQueue = new ConcurrentDictionary<string, FileSystemEventArgs>();
         private ConcurrentDictionary<string, FileSystemWatcher> _watchers = new ConcurrentDictionary<string, FileSystemWatcher>();
         private IStorage _storage;
         private TokenProvider _provider;
@@ -29,73 +29,99 @@ namespace Indexing.Kernel
             _timer.Start();
         }
 
-        private void Enqueue(string filePath, bool reportedByWatcher)
+        private void Enqueue(string filePath, FileSystemEventArgs eventArgs)
         {
-            _fileQueue.AddOrUpdate(filePath, reportedByWatcher, (fp, existedFlag) => existedFlag && reportedByWatcher);
+            _fileQueue.AddOrUpdate(filePath, eventArgs, (fp, ea) => eventArgs);
         }
 
-        private void EnqueueDirectory(string directoryPath, bool reportedByWatcher)
+        private void EnqueueDirectory(string directoryPath)
         {
             foreach (var directory in Directory.GetDirectories(directoryPath))
             {
-                EnqueueDirectory(directory, reportedByWatcher);
+                EnqueueDirectory(directory);
             }
             foreach (var file in Directory.GetFiles(directoryPath))
             {
-                Enqueue(file, reportedByWatcher);
+                Enqueue(file, null);
             }
         }
 
         private async void Process()
         {
             var frozenQueue = _fileQueue;
-            _fileQueue = new ConcurrentDictionary<string, bool>();
-
+            _fileQueue = new ConcurrentDictionary<string, FileSystemEventArgs>();
+            
             foreach (var key in frozenQueue.Keys)
             {
-                if (frozenQueue[key] && File.Exists(key))
+                var eventArgs = frozenQueue[key];
+                try
                 {
-                    // file was changed and worker knows about it
-                    await _storage.Change(_provider.Provide(key), key);
-                }
-                else if (frozenQueue[key] && !File.Exists(key))
-                {
-                    // file was deleted and worker knows about it
-                    await _storage.Delete(key);
-                    FileSystemWatcher watcherUnsubscribe;
-                    if (_watchers != null && _watchers.TryRemove(key, out watcherUnsubscribe))
+                    if (File.Exists(key))
                     {
-                        watcherUnsubscribe.EnableRaisingEvents = false;
-                        watcherUnsubscribe.Dispose();
+                        if (eventArgs == null || eventArgs.ChangeType != WatcherChangeTypes.Renamed)
+                        {
+                            if (File.Exists(key))
+                                await _storage.Add(_provider.Provide(key), key);
+                        }
+                        else
+                        {
+                            var renamedEventArgs = eventArgs as RenamedEventArgs;
+                            if (renamedEventArgs != null)
+                            {
+                                if (frozenQueue.ContainsKey(renamedEventArgs.OldFullPath))
+                                {
+                                    await _storage.Delete(renamedEventArgs.OldFullPath);
+                                    await _storage.Add(_provider.Provide(key), renamedEventArgs.FullPath);
+                                }
+                                else
+                                    await _storage.Move(renamedEventArgs.OldFullPath, renamedEventArgs.FullPath);
+                            }
+                        }
                     }
                 }
-                else if (!frozenQueue[key] && !File.Exists(key))
+                catch (Exception)
                 {
-                    // someone tries to track unexisting file
-                }
-                else
-                {
-                    // !frozenQueue[key] && File.Exists(key) === we added new file for tracking
-                    await _storage.Add(_provider.Provide(key), key);
+                    _fileQueue.TryAdd(key, eventArgs);
                 }
             }
         }
 
         private void AddFile(string filePath)
         {
-            Enqueue(filePath, false);
+            Enqueue(filePath, null);
             var fileName = Path.GetFileName(filePath);
             var watcher = new FileSystemWatcher();
             watcher.Filter = fileName;
             watcher.Path = filePath.Substring(0, filePath.Length - fileName.Length);
             watcher.NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite;
-            watcher.Changed += (sender, eventArgs) => Enqueue(filePath, true);
+            watcher.Changed += (sender, eventArgs) => Enqueue(filePath, eventArgs);
             watcher.Renamed += (sender, eventArgs) =>
             {
-                Enqueue(eventArgs.OldFullPath, true);
-                Enqueue(eventArgs.FullPath, true);
+                watcher.Filter = eventArgs.Name;
+
+                FileSystemWatcher watcherForFile;
+                if (_watchers != null)
+                {
+                    if (_watchers.TryRemove(eventArgs.FullPath, out watcherForFile))
+                    {
+                        _watchers.TryAdd(filePath, watcherForFile);
+                    }
+                }
+                Enqueue(eventArgs.FullPath, eventArgs);
             };
-            watcher.Deleted += (sender, eventArgs) => Enqueue(filePath, true);
+            watcher.Deleted += (sender, eventArgs) =>
+            {
+                watcher.EnableRaisingEvents = false;
+                
+                FileSystemEventArgs fsEventArgs;
+                _fileQueue.TryRemove(eventArgs.FullPath, out fsEventArgs);
+
+                FileSystemWatcher watcherUnsubscribe;
+                if (_watchers != null) _watchers.TryRemove(eventArgs.FullPath, out watcherUnsubscribe);
+
+                watcher.Dispose();
+                _storage.Delete(eventArgs.FullPath);
+            };
             if (_watchers != null && _watchers.TryAdd(filePath, watcher))
                 watcher.EnableRaisingEvents = true;
             else
@@ -105,32 +131,23 @@ namespace Indexing.Kernel
 
         private void AddDirectory(string directoryPath)
         {
-            EnqueueDirectory(directoryPath, false);
+            EnqueueDirectory(directoryPath);
             FileSystemWatcher watcher = new FileSystemWatcher();
             watcher.Path = directoryPath;
             watcher.NotifyFilter = NotifyFilters.Size | NotifyFilters.LastWrite | NotifyFilters.DirectoryName | NotifyFilters.FileName;
-            watcher.Created += (sender, eventArgs) =>
-            {
-                if ((File.GetAttributes(eventArgs.FullPath) & FileAttributes.Directory) != FileAttributes.Directory)
-                    // false here as it's a new file and we want it to be added
-                    Enqueue(eventArgs.FullPath, false);
-            };
-            watcher.Changed += (sender, eventArgs) =>
-            {
-                if ((File.GetAttributes(eventArgs.FullPath) & FileAttributes.Directory) != FileAttributes.Directory)
-                    Enqueue(eventArgs.FullPath, true);
-            };
-            watcher.Renamed += (sender, eventArgs) =>
-            {
-                if ((File.GetAttributes(eventArgs.FullPath) & FileAttributes.Directory) != FileAttributes.Directory)
-                {
-                    Enqueue(eventArgs.OldFullPath, true);
-                    Enqueue(eventArgs.FullPath, true);
-                }
-            };
+            watcher.Created += (sender, eventArgs) => Enqueue(eventArgs.FullPath, eventArgs);
+            watcher.Changed += (sender, eventArgs) => Enqueue(eventArgs.FullPath, eventArgs);
+            watcher.Renamed += (sender, eventArgs) => Enqueue(eventArgs.FullPath, eventArgs);
             watcher.Deleted += (sender, eventArgs) =>
             {
-                Enqueue(eventArgs.FullPath, true);
+                FileSystemEventArgs fsEventArgs;
+                _fileQueue.TryRemove(eventArgs.FullPath, out fsEventArgs);
+
+                FileSystemWatcher watcherUnsubscribe;
+                if (_watchers != null && _watchers.TryRemove(eventArgs.FullPath, out watcherUnsubscribe))
+                        watcherUnsubscribe.Dispose();
+
+                _storage.Delete(eventArgs.FullPath);
             };
             if (_watchers != null && _watchers.TryAdd(directoryPath, watcher))
                 watcher.EnableRaisingEvents = true;
@@ -176,14 +193,5 @@ namespace Indexing.Kernel
             }
             GC.SuppressFinalize(this);
         }
-    }
-
-    public enum FileState
-    {
-        Created,
-        Changed,
-        Deleted,
-        RenamedFrom,
-        RenamedTo
     }
 }
