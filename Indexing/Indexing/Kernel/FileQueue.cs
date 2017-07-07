@@ -7,11 +7,13 @@ using System.Threading;
 using Indexing.FileSystem;
 using Indexing.Storage;
 using Timer = System.Timers.Timer;
+using System.Diagnostics;
 
 namespace Indexing.Kernel
 {
     public class FileQueue : IDisposable
     {
+        private static readonly TraceSource Log = new TraceSource("Indexing.FileQueue");
         public const int ProcessPeriodMS = 250;
         private ConcurrentDictionary<string, FileSystemEventArgs> _fileQueue = new ConcurrentDictionary<string, FileSystemEventArgs>();
         private ConcurrentDictionary<string, FileSystemWatcher> _watchers = new ConcurrentDictionary<string, FileSystemWatcher>();
@@ -31,11 +33,13 @@ namespace Indexing.Kernel
 
         private void Enqueue(string filePath, FileSystemEventArgs eventArgs)
         {
+            Log.TraceEvent(TraceEventType.Verbose, 100, "{0} enqueued", filePath);
             _fileQueue.AddOrUpdate(filePath, eventArgs, (fp, ea) => eventArgs);
         }
 
         private void EnqueueDirectory(string directoryPath)
         {
+            Log.TraceEvent(TraceEventType.Verbose, 101, "{0} enqueued", directoryPath);
             foreach (var directory in Directory.GetDirectories(directoryPath))
             {
                 EnqueueDirectory(directory);
@@ -81,6 +85,7 @@ namespace Indexing.Kernel
                 }
                 catch (Exception)
                 {
+                    Log.TraceEvent(TraceEventType.Information, 102, "{0} failed to process, re-adding", key);
                     _fileQueue.TryAdd(key, eventArgs);
                 }
             }
@@ -131,11 +136,22 @@ namespace Indexing.Kernel
 
         private void AddDirectory(string directoryPath)
         {
-            EnqueueDirectory(directoryPath);
+            foreach (var directory in Directory.GetDirectories(directoryPath))
+            {
+                AddDirectory(directory);
+            }
+            foreach (var file in Directory.GetFiles(directoryPath))
+            {
+                Enqueue(file, null);
+            }
             FileSystemWatcher watcher = new FileSystemWatcher();
             watcher.Path = directoryPath;
             watcher.NotifyFilter = NotifyFilters.Size | NotifyFilters.LastWrite | NotifyFilters.DirectoryName | NotifyFilters.FileName;
-            watcher.Created += (sender, eventArgs) => Enqueue(eventArgs.FullPath, eventArgs);
+            watcher.Created += (sender, eventArgs) =>
+            {
+                if (Directory.Exists(eventArgs.FullPath)) AddDirectory(eventArgs.FullPath);
+                else Enqueue(eventArgs.FullPath, eventArgs);
+            };
             watcher.Changed += (sender, eventArgs) => Enqueue(eventArgs.FullPath, eventArgs);
             watcher.Renamed += (sender, eventArgs) => Enqueue(eventArgs.FullPath, eventArgs);
             watcher.Deleted += (sender, eventArgs) =>

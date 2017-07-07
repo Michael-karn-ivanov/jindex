@@ -179,16 +179,18 @@ namespace Indexing.Tests.Kernel
                 Assert.AreEqual(3, storage.Actions.Count);
                 var tuple = storage.Actions.Dequeue();
                 Assert.AreEqual(fileName, tuple.Item1);
-                Assert.AreEqual(StorageMock._MoveFrom, tuple.Item2);
+                Assert.AreEqual(StorageMock._Delete, tuple.Item2);
                 tuple = storage.Actions.Dequeue();
                 Assert.AreEqual(newFileName, tuple.Item1);
-                Assert.AreEqual(StorageMock._MoveTo, tuple.Item2);
+                Assert.AreEqual(StorageMock._Add, tuple.Item2);
                 tuple = storage.Actions.Dequeue();
                 Assert.AreEqual(newFileName, tuple.Item1);
                 Assert.AreEqual(StorageMock._Delete, tuple.Item2);
             }
         }
 
+        [TestMethod]
+        [TestCategory("DiskTests")]
         public void TestAddExplicitlyFileChangeFileRenameDeleteFileSlow()
         {
             var directoryName = Guid.NewGuid().ToString();
@@ -239,9 +241,68 @@ namespace Indexing.Tests.Kernel
             }
         }
 
-        public void TestCreateNestedDirectoryCopyFileCreateFileChangeFileMoveFileUpDeleteFile()
+        [TestMethod]
+        [TestCategory("DiskTests")]
+        public void TestCreateNestedDirectoryCopyFileCreateFileCMoveFileUpDeleteFileSlow()
         {
+            var directoryName = Guid.NewGuid().ToString();
+            var directory = Directory.CreateDirectory(directoryName);
+            var helperDirectory = Directory.CreateDirectory(Guid.NewGuid().ToString());
+            var fileNameWOPath = Guid.NewGuid().ToString();
+            var fileName = helperDirectory.FullName + "\\" + fileNameWOPath;
+            using (var fs = File.Create(fileName))
+            {
+                fs.Write(new byte[] {1}, 0, 1);
+            }
+            var provider = new TokenProvider(new LexerMock());
+            var storage = new StorageMock();
+            using (var objectUnderTest = new FileQueue(storage, provider))
+            {
+                objectUnderTest.Add(directory.FullName);
+                var subdirectory = directory.CreateSubdirectory(Guid.NewGuid().ToString());
+                var newFileName = subdirectory.FullName + "\\" + fileNameWOPath;
+                File.Move(fileName, newFileName);
+                Thread.Sleep((int)(1.25 * FileQueue.ProcessPeriodMS));
+                Assert.AreEqual(1, storage.Actions.Count);
+                var createdFileName = subdirectory.FullName + "\\" + Guid.NewGuid().ToString();
+                using (var fs = File.Create(createdFileName))
+                {
+                    fs.Write(new byte[] {1}, 0, 1);
+                }
+                Thread.Sleep((int)(1.25 * FileQueue.ProcessPeriodMS));
+                Assert.AreEqual(2, storage.Actions.Count);
+                var newDestination = directory.FullName + "\\" + Guid.NewGuid().ToString();
+                File.Move(createdFileName, newDestination);
+                Thread.Sleep((int)(1.25 * FileQueue.ProcessPeriodMS));
+                Assert.AreEqual(4, storage.Actions.Count);
+                File.Delete(newDestination);
+                Assert.AreEqual(5, storage.Actions.Count);
+                File.Delete(newFileName);
+
+                Assert.AreEqual(6, storage.Actions.Count);
+                var tuple = storage.Actions.Dequeue();
+                Assert.AreEqual(newFileName, tuple.Item1);
+                Assert.AreEqual(StorageMock._Add, tuple.Item2);
+                tuple = storage.Actions.Dequeue();
+                Assert.AreEqual(createdFileName, tuple.Item1);
+                Assert.AreEqual(StorageMock._Add, tuple.Item2);
+                tuple = storage.Actions.Dequeue();
+                Assert.AreEqual(createdFileName, tuple.Item1);
+                Assert.AreEqual(StorageMock._Delete, tuple.Item2);
+                tuple = storage.Actions.Dequeue();
+                Assert.AreEqual(newDestination, tuple.Item1);
+                Assert.AreEqual(StorageMock._Add, tuple.Item2);
+                tuple = storage.Actions.Dequeue();
+                Assert.AreEqual(newDestination, tuple.Item1);
+                Assert.AreEqual(StorageMock._Delete, tuple.Item2);
+                tuple = storage.Actions.Dequeue();
+                Assert.AreEqual(newFileName, tuple.Item1);
+                Assert.AreEqual(StorageMock._Delete, tuple.Item2);
+            }
+            Directory.Delete(helperDirectory.FullName);
+            Directory.Delete(directory.FullName, true);
         }
+
 
         public void TestConcurrentFileCreateChangeDelete()
         {
