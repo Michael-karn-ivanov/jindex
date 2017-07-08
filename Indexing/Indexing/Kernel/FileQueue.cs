@@ -33,13 +33,13 @@ namespace Indexing.Kernel
 
         private void Enqueue(string filePath, FileSystemEventArgs eventArgs)
         {
-            Log.TraceEvent(TraceEventType.Verbose, 100, "{0} enqueued", filePath);
+            Log.TraceEvent(TraceEventType.Information, 100, "{0} enqueued", filePath);
             _fileQueue.AddOrUpdate(filePath, eventArgs, (fp, ea) => eventArgs);
         }
 
         private void EnqueueDirectory(string directoryPath)
         {
-            Log.TraceEvent(TraceEventType.Verbose, 101, "{0} enqueued", directoryPath);
+            Log.TraceEvent(TraceEventType.Information, 101, "{0} enqueued", directoryPath);
             foreach (var directory in Directory.GetDirectories(directoryPath))
             {
                 EnqueueDirectory(directory);
@@ -54,7 +54,7 @@ namespace Indexing.Kernel
         {
             var frozenQueue = _fileQueue;
             _fileQueue = new ConcurrentDictionary<string, FileSystemEventArgs>();
-            
+
             foreach (var key in frozenQueue.Keys)
             {
                 var eventArgs = frozenQueue[key];
@@ -64,8 +64,7 @@ namespace Indexing.Kernel
                     {
                         if (eventArgs == null || eventArgs.ChangeType != WatcherChangeTypes.Renamed)
                         {
-                            if (File.Exists(key))
-                                await _storage.Add(_provider.Provide(key), key);
+                            await _storage.Add(_provider.Provide(key), key);
                         }
                         else
                         {
@@ -82,6 +81,7 @@ namespace Indexing.Kernel
                             }
                         }
                     }
+                    else Log.TraceEvent(TraceEventType.Information, 103, "File {0} not found for processing", key);
                 }
                 catch (Exception)
                 {
@@ -99,9 +99,16 @@ namespace Indexing.Kernel
             watcher.Filter = fileName;
             watcher.Path = filePath.Substring(0, filePath.Length - fileName.Length);
             watcher.NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite;
-            watcher.Changed += (sender, eventArgs) => Enqueue(filePath, eventArgs);
+            watcher.Changed += (sender, eventArgs) =>
+            {
+                Log.TraceEvent(TraceEventType.Verbose, 105,
+                    "{0} changing triggered {1} watcher event", eventArgs.FullPath, watcher.Path);
+                Enqueue(filePath, eventArgs);
+            };
             watcher.Renamed += (sender, eventArgs) =>
             {
+                Log.TraceEvent(TraceEventType.Verbose, 105,
+                    "{0} renaming to {1} triggered {2} watcher event", eventArgs.OldFullPath, eventArgs.FullPath, watcher.Path);
                 watcher.Filter = eventArgs.Name;
 
                 FileSystemWatcher watcherForFile;
@@ -116,8 +123,10 @@ namespace Indexing.Kernel
             };
             watcher.Deleted += (sender, eventArgs) =>
             {
+                Log.TraceEvent(TraceEventType.Verbose, 105,
+                    "{0} deletion triggered {1} watcher event", eventArgs.FullPath, watcher.Path);
                 watcher.EnableRaisingEvents = false;
-                
+
                 FileSystemEventArgs fsEventArgs;
                 _fileQueue.TryRemove(eventArgs.FullPath, out fsEventArgs);
 
@@ -149,19 +158,33 @@ namespace Indexing.Kernel
             watcher.NotifyFilter = NotifyFilters.Size | NotifyFilters.LastWrite | NotifyFilters.DirectoryName | NotifyFilters.FileName;
             watcher.Created += (sender, eventArgs) =>
             {
+                Log.TraceEvent(TraceEventType.Verbose, 105, 
+                    "{0} creation triggered {1} watcher event", eventArgs.FullPath, watcher.Path);
                 if (Directory.Exists(eventArgs.FullPath)) AddDirectory(eventArgs.FullPath);
                 else Enqueue(eventArgs.FullPath, eventArgs);
             };
-            watcher.Changed += (sender, eventArgs) => Enqueue(eventArgs.FullPath, eventArgs);
-            watcher.Renamed += (sender, eventArgs) => Enqueue(eventArgs.FullPath, eventArgs);
+            watcher.Changed += (sender, eventArgs) =>
+            {
+                Log.TraceEvent(TraceEventType.Verbose, 105,
+                    "{0} changing triggered {1} watcher event", eventArgs.FullPath, watcher.Path);
+                Enqueue(eventArgs.FullPath, eventArgs);
+            };
+            watcher.Renamed += (sender, eventArgs) =>
+            {
+                Log.TraceEvent(TraceEventType.Verbose, 105,
+                    "{0} renaming to {1} triggered {2} watcher event", eventArgs.OldFullPath, eventArgs.FullPath, watcher.Path);
+                Enqueue(eventArgs.FullPath, eventArgs);
+            };
             watcher.Deleted += (sender, eventArgs) =>
             {
+                Log.TraceEvent(TraceEventType.Verbose, 105,
+                    "{0} deletion triggered {1} watcher event", eventArgs.FullPath, watcher.Path);
                 FileSystemEventArgs fsEventArgs;
                 _fileQueue.TryRemove(eventArgs.FullPath, out fsEventArgs);
 
                 FileSystemWatcher watcherUnsubscribe;
                 if (_watchers != null && _watchers.TryRemove(eventArgs.FullPath, out watcherUnsubscribe))
-                        watcherUnsubscribe.Dispose();
+                    watcherUnsubscribe.Dispose();
 
                 _storage.Delete(eventArgs.FullPath);
             };

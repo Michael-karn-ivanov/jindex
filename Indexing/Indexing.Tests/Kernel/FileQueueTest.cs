@@ -303,7 +303,8 @@ namespace Indexing.Tests.Kernel
             Directory.Delete(directory.FullName, true);
         }
 
-
+        [TestMethod]
+        [TestCategory("DiskTests")]
         public void TestConcurrentFileCreateChangeDelete()
         {
         }
