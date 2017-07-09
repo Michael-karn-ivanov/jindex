@@ -327,23 +327,25 @@ namespace Indexing.Tests.Kernel
             public const string _MoveTo = "MoveTo";
             public Queue<Tuple<string, string>> Actions = new Queue<Tuple<string, string>>();
 
-            public Task Add(IEnumerable<string> words, string filePath)
+            public void Add(IEnumerable<string> words, string filePath)
             {
                 Actions.Enqueue(new Tuple<string, string>(filePath, _Add));
-                return Task.Delay(0);
             }
 
-            public Task Delete(string filePath)
+            public void Delete(string filePath)
             {
                 Actions.Enqueue(new Tuple<string, string>(filePath, _Delete));
-                return Task.Delay(0);
             }
 
-            public Task Move(string filePathFrom, string filePathTo)
+            public IEnumerable<string> Lookup(params string[] words)
+            {
+                throw new NotImplementedException();
+            }
+
+            public void Move(string filePathFrom, string filePathTo)
             {
                 Actions.Enqueue(new Tuple<string, string>(filePathFrom, _MoveFrom));
                 Actions.Enqueue(new Tuple<string, string>(filePathTo, _MoveTo));
-                return Task.Delay(0);
             }
         }
     }

@@ -64,7 +64,7 @@ namespace Indexing.Kernel
                     {
                         if (eventArgs == null || eventArgs.ChangeType != WatcherChangeTypes.Renamed)
                         {
-                            await _storage.Add(_provider.Provide(key), key);
+                            _storage.Add(_provider.Provide(key), key);
                         }
                         else
                         {
@@ -73,11 +73,11 @@ namespace Indexing.Kernel
                             {
                                 if (frozenQueue.ContainsKey(renamedEventArgs.OldFullPath))
                                 {
-                                    await _storage.Delete(renamedEventArgs.OldFullPath);
-                                    await _storage.Add(_provider.Provide(key), renamedEventArgs.FullPath);
+                                    _storage.Delete(renamedEventArgs.OldFullPath);
+                                    _storage.Add(_provider.Provide(key), renamedEventArgs.FullPath);
                                 }
                                 else
-                                    await _storage.Move(renamedEventArgs.OldFullPath, renamedEventArgs.FullPath);
+                                    _storage.Move(renamedEventArgs.OldFullPath, renamedEventArgs.FullPath);
                             }
                         }
                     }

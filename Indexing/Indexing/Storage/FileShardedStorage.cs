@@ -65,7 +65,20 @@ namespace Indexing.Storage
 
         public void Move(string filePathFrom, string filePathTo)
         {
-            throw new NotImplementedException();
+            HashSet<string> words;
+            if (_fileWords.TryRemove(filePathFrom, out words))
+            {
+                _fileWords.AddOrUpdate(filePathTo, words, (s, set) => words);
+                ConcurrentDictionary<string, string> files;
+                string devNull;
+                foreach (var word in words)
+                {
+                    if (_wordFiles.TryGetValue(word, out files))
+                    {
+                        if (files.TryRemove(filePathFrom, out devNull)) files.TryAdd(filePathTo, filePathTo);
+                    }
+                }
+            }
         }
     }
 }
