@@ -45,6 +45,7 @@
     <Compile Include="FileSystem\TokenProvider.cs" />
     <Compile Include="Kernel\FileQueue.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Storage\FileShardedStorage.cs" />
     <Compile Include="Storage\IStorage.cs" />
   </ItemGroup>
   <ItemGroup />
